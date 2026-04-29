@@ -37,6 +37,32 @@ SCANNER = 'fujitsu:fi-6110dj:1206658'
 # See `tesseract --list-langs`
 OCR_LANG = 'deu+eng'
 
+# presets must use the long form flags (e.g. "resolution", not "r")
+PRESETS = {
+    "text": {
+        "color": "gray",
+        "resolution": 400,
+        "nsparams": ['--skip_empty', '--binarize', '--denoise_opening', '--opening_strength', '1'],
+        },
+
+    "ctext": {
+        "color": 'color',
+        "resolution": 400,
+        "nsparams": [
+            '--skip_empty',
+            '--denoise_opening',
+            '--opening_strength', '1',
+            '--unsharp_mask',
+            '--unsharp_amount', '1',
+            '--unsharp_radius', '1',
+            '--saturate',
+            '--white_background',
+            '--black',
+            '--n_colors', '10'
+            ],
+        },
+    }
+
 ################################################
 
 def parse_args():
@@ -80,9 +106,12 @@ def parse_args():
     parser.add_argument(
         "-p",
         "--preset",
-        help='Presets: "text": A preset for text that results in black-and-white scans - corresponds to \'-c gray -d 400 --nsparams="-e -b --denoise_opening -os 1"\'',
+        help='Presets:'
+            +'"text": A preset for text that results in black-and-white scans - corresponds to \'--color gray --resolution 400 --nsparams="--skip_empty --binarize --denoise_opening --opening_strength 1"\','
+            +'"ctext": A preset for text scans including colors - corresponds to \'--color color --resolution 400 --nsparams="--skip_empty --denoise_opening --opening_strength 1 --unsharp_mask --unsharp_amount 1 --unsharp_radius 1 --saturate --white_background --black --n_colors 10"\'',
         choices=[
-            "text"],
+            "text",
+            "ctext"],
         default='',
         type=str.lower)
     parser.add_argument(
@@ -117,7 +146,7 @@ def parse_args():
         '--scan',
         action='store_true',
         default=False,
-        help='Just scan, skip the rest.')
+        help='Just scan to images, skip the rest.')
     parser.add_argument(
         '-k',
         '--keep_intermediate',
@@ -154,12 +183,15 @@ def parse_args():
 
     argcomplete.autocomplete(parser)
 
-    return parser.parse_args()
+    return parser, parser.parse_args()
 
 
 def check_if_tmsu_db_exists(args):
     """
     Checks if a TMSU database exists in the current directory.
+
+    Args:
+        args (argparse.Namespace): The command line arguments.
 
     Returns:
         bool: True if a TMSU database exists, False otherwise.
@@ -178,6 +210,7 @@ def run_command(args, command, capture_output=False, returncode_accept=None):
     Runs a command as a subprocess and handles potential errors.
 
     Args:
+        args (argparse.Namespace): The command line arguments.
         command (list): The command to be executed as a list of strings.
         capture_output (bool, optional): Whether to capture the command's output.
         returncode_accept (int, optional): An expected return code that indicates success.
@@ -191,7 +224,7 @@ def run_command(args, command, capture_output=False, returncode_accept=None):
     try:
         command = [ c.strip() for c in command if c.strip() != '' ]
         logging.debug('Running command \'{}\''.format(' '.join(command)))
-        subprocess.run(command, capture_output=False if args.verbose == 2 else capture_output, check=True)
+        subprocess.run(command, capture_output=False if args.verbose >= 2 else capture_output, check=True)
         return 0
 
     except subprocess.CalledProcessError as e:
@@ -218,6 +251,7 @@ def scan_document(args, paper_size, resolution, mode, color, folder='./'):
     Scans a document using scanimage and saves it as PNM images in the specified folder.
 
     Args:
+        args (argparse.Namespace): The command line arguments.
         paper_size (str): The paper size, such as "a4" or "a5".
         resolution (int): The scanning resolution in DPI.
         mode (str): The scanning mode, either "single" or "duplex".
@@ -264,6 +298,7 @@ def compress_document(args, folder='./'):
     Expects implicite name convention s%d.pnm within folder "folder"
 
     Args:
+        args (argparse.Namespace): The command line arguments.
         folder (str, optional): The folder containing the PNM images. Defaults to './'.
 
     Returns:
@@ -296,6 +331,7 @@ def ocr_document(file, output_file, args):
     Args:
         file (pathlib.Path): The path to the input PDF file.
         output_file (pathlib.Path): The path to save the OCRed PDF file.
+        args (argparse.Namespace): The command line arguments.
     """
     # Execute the compression command
     logging.info('OCRing document {} ...'.format(file))
@@ -325,27 +361,65 @@ def check_command_exists(command_name: str):
         raise RuntimeError('"{}" not found in PATH! Is it installed?'.format(command_name))
 
 
-def main():
-    args = parse_args()
+def overwrite_ifnotdefault(param, value, parser, args):
+    """
+    Overwrite <args>.nsparams with a list of given <params>.
 
+    Args:
+        nsparams (list): The command to be executed as a list of strings.
+        args (argparse.Namespace): The command line arguments.
+
+    Returns:
+        args (argparse.Namespace): The command line arguments.
+    """
+    if param.startswith('--'):
+        pass
+    elif param.startswith('-'):
+        pass
+    else:
+        pass
+    default = [s.strip() for s in parser.get_default('nsparams').strip().split(' ')]
+
+    # If custom commands are given, they take precedence.
+    if nsparams != default:
+        pass
+
+
+def main():
+    parser, args = parse_args()
+
+    #print(parser.get_default('--nsparams'))
+    #sys.exit(0)
     if args.verbose == 1:
         logging.basicConfig(encoding='utf-8', format="%(levelname)s:%(message)s", level=logging.INFO)
-    if args.verbose == 2:
-        logging.basicConfig(encoding='utf-8', format="%(lineno)d-%(levelname)s:%(message)s", level=logging.DEBUG)
-    else:
+    elif args.verbose == 2:
         logging.basicConfig(encoding='utf-8', format="%(lineno)d-%(levelname)s:%(message)s", level=logging.WARNING)
+    else:
+        logging.basicConfig(encoding='utf-8', format="%(lineno)d-%(levelname)s:%(message)s", level=logging.DEBUG)
 
     # Check if external programs are accessible
-    for command in ['tmsu', 'scanimage']:
-        check_command_exists(command)
+    check_command_exists('scanimage')
+
+    if args.tags is not None:
+        check_command_exists('tmsu')
+
     if not args.skip_ocr:
         check_command_exists('ocrmypdf')
+    
+    if args.text:
+        args.preset = "text"
 
-    if args.text or args.preset == 'text':
-        args.color = 'gray'
-#         args.nsparams = ['-w', '-s', '--unsharp_mask', '-n', '2']
-        args.resolution = 400
-        args.nsparams = ['-e', '-b', '--denoise_opening', '-os', '1']
+    # Check if the application of a preset was ordered
+    if args.text or ("-p" in sys.argv or "--preset" in sys.argv):
+
+        # Find the parser actions defined in PRESETS[args.preset], e.g. PRESETS['text']
+        for action in parser._actions:
+            if action.dest in PRESETS[args.preset]:
+                # action.option_strings contains the list of flags (e.g., ['-c', '--color'])
+                # Apply preset option only if there is no override
+                # (additional flags override preset settings)
+                if not any(flag in sys.argv for flag in action.option_strings):
+                    setattr(args, action.dest, PRESETS[args.preset][action.dest])
 
     if args.scan:
         args.keep_intermediate = True
