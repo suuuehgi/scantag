@@ -42,7 +42,15 @@ PRESETS = {
     "text": {
         "color": "gray",
         "resolution": 400,
-        "nsparams": ['--skip_empty', '--binarize', '--denoise_opening', '--opening_strength', '1'],
+        "nsparams": [
+            '--skip_empty',
+            '--binarize',
+            '--denoise_opening',
+            '--opening_strength', '1',
+            '--unsharp_mask',
+            '--unsharp_amount', '5',
+            '--unsharp_radius', '15',
+            ],
         },
 
     "ctext": {
@@ -64,6 +72,9 @@ PRESETS = {
     }
 
 ################################################
+
+# Convert PRESETS[key] to string
+presets2string = lambda key: " ".join([f"--{k} {v}" if not isinstance(v, list) else f'--{k} "{" ".join(v)}"' for k,v in PRESETS[key].items()])
 
 def parse_args():
     """
@@ -107,8 +118,8 @@ def parse_args():
         "-p",
         "--preset",
         help='Presets:'
-            +'"text": A preset for text that results in black-and-white scans - corresponds to \'--color gray --resolution 400 --nsparams="--skip_empty --binarize --denoise_opening --opening_strength 1"\','
-            +'"ctext": A preset for text scans including colors - corresponds to \'--color color --resolution 400 --nsparams="--skip_empty --denoise_opening --opening_strength 1 --unsharp_mask --unsharp_amount 1 --unsharp_radius 1 --saturate --white_background --black --n_colors 10"\'',
+            +f'"text":  A preset for text that results in black-and-white scans - corresponds to \'{presets2string("text")}\','
+            +f'"ctext": A preset for text scans including colors - corresponds to \'{presets2string("ctext")}\'',
         choices=[
             "text",
             "ctext"],
