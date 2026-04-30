@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # PYTHON_ARGCOMPLETE_OK
-VERSION = 1.2
+VERSION = 1.3
 
 import argcomplete
 
@@ -28,14 +28,10 @@ import sys
 # Create tmp folder to work in and create unique non-existing file names
 import tempfile
 
-
 #################### CONFIG ####################
 
 # See `scanimage --list-devices`
 SCANNER = 'fujitsu:fi-6110dj:1206658'
-
-# See `tesseract --list-langs`
-OCR_LANG = 'deu+eng'
 
 # presets must use the long form flags (e.g. "resolution", not "r")
 PRESETS = {
@@ -44,7 +40,9 @@ PRESETS = {
         "resolution": 400,
         "nsparams": [
             '--skip_empty',
+            '--white_background',
             '--binarize',
+            '--normalize',
             '--denoise_opening',
             '--opening_strength', '1',
             '--unsharp_mask',
@@ -58,15 +56,31 @@ PRESETS = {
         "resolution": 400,
         "nsparams": [
             '--skip_empty',
+            '--white_background',
+            '--black',
+            '--normalize',
+            '--n_colors', '10',
             '--denoise_opening',
             '--opening_strength', '1',
             '--unsharp_mask',
             '--unsharp_amount', '1',
             '--unsharp_radius', '1',
-            '--saturate',
+            ],
+        },
+
+    "smusic": {
+        "color": "gray",
+        "resolution": 400,
+        "nsparams": [
+            '--skip_empty',
             '--white_background',
-            '--black',
-            '--n_colors', '10'
+            '--binarize',
+            '--normalize',
+            '--denoise_opening',
+            '--opening_strength', '1.9',
+            '--unsharp_mask',
+            '--unsharp_amount', '5',
+            '--unsharp_radius', '15',
             ],
         },
     }
@@ -74,6 +88,7 @@ PRESETS = {
 ################################################
 
 # Convert PRESETS[key] to string
+# Helper function to generate strings for the --preset help text.
 presets2string = lambda key: " ".join([f"--{k} {v}" if not isinstance(v, list) else f'--{k} "{" ".join(v)}"' for k,v in PRESETS[key].items()])
 
 def parse_args():
@@ -119,10 +134,13 @@ def parse_args():
         "--preset",
         help='Presets:'
             +f'"text":  A preset for text that results in black-and-white scans - corresponds to \'{presets2string("text")}\','
-            +f'"ctext": A preset for text scans including colors - corresponds to \'{presets2string("ctext")}\'',
+            +f'"ctext": A preset for text scans including colors - corresponds to \'{presets2string("ctext")}\','
+            +f'"smusic": A preset for sheet music scans - corresponds to \'{presets2string("smusic")}\'',
         choices=[
             "text",
-            "ctext"],
+            "ctext",
+            "smusic",
+            ],
         default='',
         type=str.lower)
     parser.add_argument(
@@ -134,7 +152,7 @@ def parse_args():
             601),
         metavar="{50..600}",
         default=300,
-         type=int)
+        type=int)
     parser.add_argument(
         '-t',
         '--tags',
@@ -152,7 +170,7 @@ def parse_args():
         "--text",
         action='store_true',
         default=False,
-        help='Short for --preset="text" - A preset for text that results in black-and-white scans - corresponds to \'-c gray -d 400 --nsparams "-e -b --denoise_opening -os 1"\'')
+        help=f'Short for --preset="text" - A preset for text that results in black-and-white scans - corresponds to \'{presets2string("text")}\'')
     parser.add_argument(
         '--scan',
         action='store_true',
@@ -175,6 +193,18 @@ def parse_args():
         action="store_true",
         default=False)
     parser.add_argument(
+        "-l",
+        "--language",
+        action='append',
+        help="Tesseract OCR language: eng, deu, spa, fra, ita, ... Can be used multiple times for multiple languages. See `tesseract --list-langs` for installed languages or here for further information: https://ocrmypdf.readthedocs.io/en/latest/languages.html",
+        default=['eng', 'deu'])
+    parser.add_argument(
+        '-d',
+        '--deskew',
+        action='store_true',
+        default=False,
+        help='Pass the --deskew flag to ocrmypdf for automatic deskewing.')
+    parser.add_argument(
         '-v',
         '--verbose',
         action='count',
@@ -196,7 +226,6 @@ def parse_args():
 
     return parser, parser.parse_args()
 
-
 def check_if_tmsu_db_exists(args):
     """
     Checks if a TMSU database exists in the current directory.
@@ -214,7 +243,6 @@ def check_if_tmsu_db_exists(args):
     return_code = run_command(args, ['tmsu', 'tags'], capture_output=True, returncode_accept=1)
 
     return True if return_code == 0 else False
-
 
 def run_command(args, command, capture_output=False, returncode_accept=None):
     """
@@ -255,7 +283,6 @@ def run_command(args, command, capture_output=False, returncode_accept=None):
     except Exception as e:
         logging.critical(f"An unexpected error occurred: {e}")
         sys.exit(1)
-
 
 def scan_document(args, paper_size, resolution, mode, color, folder='./'):
     """
@@ -302,7 +329,6 @@ def scan_document(args, paper_size, resolution, mode, color, folder='./'):
     )
     logging.info("Done")
 
-
 def compress_document(args, folder='./'):
     """
     Compresses scanned PNM images in the specified folder into a PDF file using noteshrunk.
@@ -334,7 +360,6 @@ def compress_document(args, folder='./'):
 
     return file_pdf
 
-
 def ocr_document(file, output_file, args):
     """
     Performs OCR on a PDF document using ocrmypdf and saves the result to a new file.
@@ -347,16 +372,16 @@ def ocr_document(file, output_file, args):
     # Execute the compression command
     logging.info('OCRing document {} ...'.format(file))
     run_command(args, [
-        "ocrmypdf",
-        "-v" if args.verbose >= 1 else '',
-        "-l", OCR_LANG,
+        'ocrmypdf',
+        '-v' if args.verbose >= 1 else '',
+        '-l', '+'.join(list(set(args.language))),
+        '--deskew' if args.deskew else '',
         str(file),
         '{}'.format(str(output_file))
     ],
         capture_output=True,
     )
     logging.info('Done')
-
 
 def check_command_exists(command_name: str):
     """
@@ -370,7 +395,6 @@ def check_command_exists(command_name: str):
     """
     if not (shutil.which(command_name) is not None):
         raise RuntimeError('"{}" not found in PATH! Is it installed?'.format(command_name))
-
 
 def overwrite_ifnotdefault(param, value, parser, args):
     """
@@ -394,7 +418,6 @@ def overwrite_ifnotdefault(param, value, parser, args):
     # If custom commands are given, they take precedence.
     if nsparams != default:
         pass
-
 
 def main():
     parser, args = parse_args()
