@@ -109,7 +109,6 @@ def parse_args():
         nargs='?',
         type=Path,
         help="Output File Name for the Scanned Document")
-
     parser.add_argument(
         "-m",
         "--mode",
@@ -525,14 +524,14 @@ def main():
 
     # Tag resulting pdf if tags are given
     if not args.scan:
-        if args.tags
+        if args.tags:
 
             run_command(args, ['ftag', 'add', str(args.output_file)] + args.tags)
             logging.info(f'{args.output_file} tagged with: ' + ', '.join(args.tags))
 
         if args.tdate:
 
-            run_command(args, ['ftag', 'date', str(args.output_file)] + args.tdate)
+            run_command(args, ['ftag', 'date', str(args.output_file), args.tdate])
             logging.info(f'{args.output_file} tagged with: ' + args.tdate)
 
 
