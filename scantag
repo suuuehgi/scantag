@@ -156,8 +156,14 @@ def parse_args():
     parser.add_argument(
         '-t',
         '--tags',
-        help="Comma-separated list of tags to be used with tmsu.\nE.g. \"tag1, tag2, tag3\"",
+        help="Comma-separated list of tags to be used with ftag.\nE.g. \"tag1, tag2, tag3\"",
         type=lambda t: [s.strip() for s in t.strip().split(',')],
+        default=None)
+    parser.add_argument(
+        '-td',
+        '--tdate',
+        help="Add date tag in the form YYYY-MM-DD.",
+        type=str,
         default=None)
     parser.add_argument(
         "-s",
@@ -215,7 +221,7 @@ def parse_args():
         '--overwrite',
         action='store_true',
         default=False,
-        help='Answer all questions with Yes. Overwrite existing files / Create TMSU database without asking.')
+        help='Answer all questions with Yes. Overwrite existing files without asking.')
     parser.add_argument(
         '--version',
         action='version',
@@ -225,24 +231,6 @@ def parse_args():
     argcomplete.autocomplete(parser)
 
     return parser, parser.parse_args()
-
-def check_if_tmsu_db_exists(args):
-    """
-    Checks if a TMSU database exists in the current directory.
-
-    Args:
-        args (argparse.Namespace): The command line arguments.
-
-    Returns:
-        bool: True if a TMSU database exists, False otherwise.
-    """
-
-    # Try to list the tags. If this succeeds the db exists, otherwise not.
-    # This is tied to the parsing speed of the db but _should_ be fast.
-    # Collect the output to not flush them to stdout
-    return_code = run_command(args, ['tmsu', 'tags'], capture_output=True, returncode_accept=1)
-
-    return True if return_code == 0 else False
 
 def run_command(args, command, capture_output=False, returncode_accept=None):
     """
@@ -435,7 +423,7 @@ def main():
     check_command_exists('scanimage')
 
     if args.tags is not None:
-        check_command_exists('tmsu')
+        check_command_exists('ftag')
 
     if not args.skip_ocr:
         check_command_exists('ocrmypdf')
@@ -536,28 +524,16 @@ def main():
         os.chdir(folder_wd)
 
     # Tag resulting pdf if tags are given
-    if args.tags is not None and not args.scan:
+    if not args.scan:
+        if args.tags
 
-        # check if TMSU db exists
-        if not check_if_tmsu_db_exists(args):
+            run_command(args, ['ftag', 'add', str(args.output_file)] + args.tags)
+            logging.info(f'{args.output_file} tagged with: ' + ', '.join(args.tags))
 
-            if not args.overwrite:
-                # If no TMSU db exists, ask if one should be created
-                while True:
-                    response = input(
-                        "No TMSU db in the output folder! Create? [y/N] ").strip().lower()
-                    if response == '' or response == 'n':
-                        # If not, we're done.
-                        logging.info("Exiting ...")
-                        sys.exit(0)
-                    elif response == 'y':
-                        run_command(args, ['tmsu', 'init'], capture_output=True)
-                        break
-            else:
-                run_command(args, ['tmsu', 'init'], capture_output=True)
+        if args.tdate:
 
-        run_command(args, ['tmsu', 'tag', str(args.output_file)] + args.tags)
-        logging.info('{} tagged with: '.format(args.output_file) + ', '.join(args.tags))
+            run_command(args, ['ftag', 'date', str(args.output_file)] + args.tdate)
+            logging.info(f'{args.output_file} tagged with: ' + args.tdate)
 
 
 if __name__ == "__main__":
