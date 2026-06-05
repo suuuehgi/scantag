@@ -419,7 +419,8 @@ def main():
         logging.basicConfig(encoding='utf-8', format="%(lineno)d-%(levelname)s:%(message)s", level=logging.DEBUG)
 
     # Check if external programs are accessible
-    check_command_exists('scanimage')
+    for prog in ['scanimage', 'noteshrunk-dev']:
+            check_command_exists(prog)
 
     if args.tags is not None:
         check_command_exists('ftag')
