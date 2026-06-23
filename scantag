@@ -167,10 +167,20 @@ def parse_args():
     parser.add_argument(
         "-s",
         "--paper-size",
-        help="Paper Size for Scanning",
-        choices=["a4", "a5"],
+        help="Paper Size for Scanning. a4s: a4 carrier sheet / sleeve",
+        choices=["a4", "a5", "a4s"],
         default="a4",
         type=str.lower)
+    parser.add_argument(
+        "-so",
+        "--sleeve-offset",
+        help="Offset [in mm] from the top when using a carrier sheet.",
+        choices=range(
+            0,
+            579),
+        metavar="{0..579}",
+        default=22,
+        type=int)
     parser.add_argument(
         "--text",
         action='store_true',
@@ -297,14 +307,18 @@ def scan_document(args, paper_size, resolution, mode, color, folder='./'):
         "--batch-count=999", "--batch=" + str(Path(folder).joinpath("s%d.pnm")), "--batch-start=1",
         "--buffermode", "On",
         "--page-width", "210" if paper_size == "a4" else (
-            "148" if paper_size == "a5" else (
-            "105" if paper_size == "a6" else "210")),
+            "210" if paper_size == "a4s" else (
+            "148" if paper_size == "a5"  else (
+            "105" if paper_size == "a6"  else "210"))),
         "--page-height", "297" if paper_size == "a4" else (
-            "210" if paper_size == "a5" else (
-            "148" if paper_size == "a6" else "297")),
-        "-y", "297" if paper_size == "a4" else (
-              "210" if paper_size == "a5" else (
-              "148" if paper_size == "a6" else "297")),
+            str(297 + args.sleeve_offset) if paper_size == "a4s" else (
+            "210" if paper_size == "a5"  else (
+            "148" if paper_size == "a6"  else "297"))),
+        "-y", "297" if paper_size == "a4"  else (
+              "297" if paper_size == "a4s" else (
+              "210" if paper_size == "a5"  else (
+              "148" if paper_size == "a6"  else "297"))),
+        "-t", str(args.sleeve_offset) if paper_size == "a4s" else "0",
         "--ald=yes",
         "--mode", color.capitalize(),
         "--format", "pnm",
